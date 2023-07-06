@@ -1,8 +1,9 @@
-use std::{error::Error, fs};
+use std::{env, error::Error, fs};
 
 pub struct Config {
     pub query: String,
     pub file_path: String,
+    pub ignore_case: bool,
 }
 
 impl Config {
@@ -13,14 +14,27 @@ impl Config {
 
         let query = args[1].clone();
         let file_path = args[2].clone();
+        let ignore_case = env::var("IGNORE_CASE").is_ok();
 
-        Ok(Config { query, file_path })
+        println!("ignore_case = {ignore_case}");
+
+        Ok(Config {
+            query,
+            file_path,
+            ignore_case,
+        })
     }
 
     pub fn run(&self) -> Result<(), Box<dyn Error>> {
         let contents = fs::read_to_string(&self.file_path)?;
 
-        for line in search(&self.query, &contents) {
+        let matching_lines = if self.ignore_case {
+            search_case_insenstive(&self.query, &contents)
+        } else {
+            search(&self.query, &contents)
+        };
+
+        for line in matching_lines {
             println!("{line}");
         }
 
@@ -40,12 +54,25 @@ pub fn search<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
     lines
 }
 
+pub fn search_case_insenstive<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
+    let query = query.to_lowercase();
+    let mut lines: Vec<&str> = Vec::new();
+
+    for line in contents.lines() {
+        if line.to_lowercase().contains(&query) {
+            lines.push(line);
+        }
+    }
+
+    lines
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn one_result() {
+    fn search_test() {
         let query = "duct";
         let contents = "\
 Rust:
@@ -53,5 +80,20 @@ safe, fast, productive.
 Pick three.";
 
         assert_eq!(search(query, contents), vec!["safe, fast, productive."]);
+    }
+
+    #[test]
+    fn search_case_insensitive_test() {
+        let query = "rust";
+        let contents = "\
+Rust:
+safe, fast, productive.
+Pick three.
+Trust me";
+
+        assert_eq!(
+            search_case_insenstive(query, contents),
+            vec!["Rust:", "Trust me"]
+        );
     }
 }
